@@ -86,7 +86,7 @@ def suggest_players(input_text, is_arabic=False):
                     player_name = link.text.strip()
                     normalized_player = normalize_name(player_name)
                     similarity = fuzz.partial_ratio(normalized_input, normalized_player)
-                    if similarity > 60 and player_name not in suggestions:  # خفض العتبة إلى 60
+                    if similarity > 80 and player_name not in suggestions:  # رفع العتبة إلى 80
                         suggestions.append(player_name)
             if len(suggestions) > 1:
                 break
@@ -102,7 +102,11 @@ def get_transfer_data(player_name, club_name):
     try:
         base_url = "https://www.transfermarkt.com"
         club_name_en = translate_club_name(club_name)
-        normalized_club = normalize_name(club_name_en)
+        normalized_club_variants = [
+            normalize_name(club_name_en),
+            normalize_name("FC " + club_name_en),
+            normalize_name(club_name_en.replace("Barcelona", "Barça"))
+        ]
         search_queries = [player_name.replace(' ', '+'), normalize_name(player_name).replace(' ', '+')]
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -120,7 +124,7 @@ def get_transfer_data(player_name, club_name):
                 link = row.select_one("td.hauptlink a")
                 if link and link.text.strip():
                     candidate_name = link.text.strip()
-                    if normalize_name(candidate_name) == normalize_name(player_name):
+                    if fuzz.partial_ratio(normalize_name(candidate_name), normalize_name(player_name)) > 80:
                         player_url = base_url + link["href"]
                         break
             if player_url:
@@ -149,15 +153,17 @@ def get_transfer_data(player_name, club_name):
         if rumors_div:
             rows = rumors_div.select("table.transfergeruechte tbody tr")
             logger.info(f"Found {len(rows)} rumor rows")
+            if not rows:
+                logger.warning("No rumor rows found in transfers div")
             for row in rows:
                 columns = row.find_all("td")
-                if len(columns) >= 5:  # تقليل العدد لتجنب الأخطاء
+                if columns:  # إزالة شرط len(columns) >= 5
                     title = columns[0].text.strip()
                     logger.info(f"Rumor title: {title}, Club: {club_name_en}")
                     # مطابقة مرنة لاسم النادي
-                    if fuzz.partial_ratio(normalized_club, normalize_name(title)) > 70:
+                    if any(fuzz.partial_ratio(variant, normalize_name(title)) > 60 for variant in normalized_club_variants):
                         percentage = 0
-                        percent_span = row.select_one(".tm-odds-bar__percentage")
+                        percent_span = row.select_one(".tm-odds-bar__percentage") or row.select_one(".percentage") or row.select_one("span[class*='percentage']")
                         if percent_span and "%" in percent_span.text:
                             try:
                                 percentage = float(percent_span.text.replace("%", "").strip())
@@ -172,6 +178,8 @@ def get_transfer_data(player_name, club_name):
                         })
                         club_probability = percentage
                         logger.info(f"Matched rumor: {title}, Percentage: {percentage}%")
+        else:
+            logger.warning("Transfers div not found")
         transfer_info = {
             "probability": club_probability,
             "source": "Transfermarkt"
