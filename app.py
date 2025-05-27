@@ -29,7 +29,6 @@ club_translations = {
     "الشباب": "Al-Shabab",
     "الاتفاق": "Al-Ettifaq",
     "القادسية": "Al-Qadsiah",
-    # أضف المزيد حسب الحاجة
 }
 
 # ترجمة اسم النادي إذا كان بالعربية
@@ -52,7 +51,6 @@ def suggest_players(input_text, is_arabic=False):
     suggestions = [input_text]
     normalized_input = normalize_name(input_text)
 
-    # ترجمة الإدخال العربي إلى الإنجليزية
     if is_arabic:
         try:
             input_text_en = GoogleTranslator(source="ar", target="en").translate(input_text).lower().strip()
@@ -64,7 +62,6 @@ def suggest_players(input_text, is_arabic=False):
 
     try:
         base_url = "https://www.transfermarkt.com"
-        # محاولة البحث بالاسم الأصلي والمنقح
         search_queries = [input_text.replace(' ', '+'), normalize_name(input_text).replace(' ', '+')]
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -72,22 +69,22 @@ def suggest_players(input_text, is_arabic=False):
         }
         for query in search_queries:
             search_url = f"{base_url}/schnellsuche/ergebnis/schnellsuche?query={query}"
+            logger.info(f"Searching: {search_url}")
             res = requests.get(search_url, headers=headers, timeout=10)
             res.raise_for_status()
             soup = BeautifulSoup(res.content, "html.parser")
-            # تحسين البحث عن الروابط
-            player_rows = soup.select("table.items tr.odd, table.items tr.even")
+            player_rows = soup.select("table.items > tbody > tr")
             for row in player_rows:
-                link = row.select_one("a.spielprofil_tooltip")
+                link = row.select_one("td.hauptlink a")
                 if link and link.text.strip():
                     player_name = link.text.strip()
                     normalized_player = normalize_name(player_name)
                     similarity = fuzz.partial_ratio(normalized_input, normalized_player)
                     if similarity > 80 and player_name not in suggestions:
                         suggestions.append(player_name)
-            if len(suggestions) > 1:  # إذا وجدت اقتراحات، توقف
+            if len(suggestions) > 1:
                 break
-            time.sleep(1)  # تأخير لتجنب الحظر
+            time.sleep(1)
     except Exception as e:
         logger.error(f"Transfermarkt search error: {str(e)}")
 
@@ -98,10 +95,8 @@ def suggest_players(input_text, is_arabic=False):
 def get_transfer_data(player_name, club_name):
     try:
         base_url = "https://www.transfermarkt.com"
-        # ترجمة اسم النادي إذا كان عربيًا
         club_name_en = translate_club_name(club_name)
         normalized_club = normalize_name(club_name_en)
-        # محاولة البحث بالاسم الأصلي والمنقح
         search_queries = [player_name.replace(' ', '+'), normalize_name(player_name).replace(' ', '+')]
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -110,12 +105,13 @@ def get_transfer_data(player_name, club_name):
         player_url = None
         for query in search_queries:
             search_url = f"{base_url}/schnellsuche/ergebnis/schnellsuche?query={query}"
+            logger.info(f"Fetching player: {search_url}")
             res = requests.get(search_url, headers=headers, timeout=10)
             res.raise_for_status()
             soup = BeautifulSoup(res.content, "html.parser")
-            player_rows = soup.select("table.items tr.odd, table.items tr.even")
+            player_rows = soup.select("table.items > tbody > tr")
             for row in player_rows:
-                link = row.select_one("a.spielprofil_tooltip")
+                link = row.select_one("td.hauptlink a")
                 if link and link.text.strip():
                     candidate_name = link.text.strip()
                     if normalize_name(candidate_name) == normalize_name(player_name):
@@ -128,12 +124,13 @@ def get_transfer_data(player_name, club_name):
         if not player_url:
             return None, None, [], f"❌ لم يتم العثور على اللاعب: {player_name}"
 
+        logger.info(f"Player URL: {player_url}")
         res = requests.get(player_url, headers=headers, timeout=10)
         res.raise_for_status()
         soup = BeautifulSoup(res.content, "html.parser")
-        name_tag = soup.find("h1", {"itemprop": "name"})
+        name_tag = soup.find("h1", {"class": "data-header__headline-wrapper"})
         market_value_tag = soup.select_one(".data-header__market-value-wrapper")
-        image_tag = soup.select_one("img.data-header__profile-image")
+        image_tag = soup.select_one(".data-header__profile-image")
         player_info = {
             "name": name_tag.text.strip() if name_tag else player_name,
             "market_value": market_value_tag.text.strip() if market_value_tag else "غير متوفر",
@@ -147,7 +144,7 @@ def get_transfer_data(player_name, club_name):
             rows = rumors_div.select("table.transfergeruechte tbody tr")
             for row in rows:
                 columns = row.find_all("td")
-                if len(columns) >= 6:  # Adjusted to match actual structure
+                if len(columns) >= 6:
                     title = columns[0].text.strip()
                     if normalized_club in normalize_name(title):
                         percentage = 0
@@ -175,20 +172,20 @@ def get_transfer_data(player_name, club_name):
     except Exception as e:
         return None, None, [], f"❌ حدث خطأ غير متوقع: {str(e)}"
 
-# تنسيق الواجهة
+# تنسيق الواجهة باستخدام st.html
 st.set_page_config(page_title="Mercato App", layout="wide")
-st.markdown("""
+st.html("""
     <style>
-    .main {background-color: #f0f5f5; font-family: 'Arial', sans-serif;}
-    .title {color: #2c3e50; font-size: 2.5em; font-weight: bold; text-align: center; margin-bottom: 20px;}
-    .subheader {color: #34495e; font-size: 1.5em; font-weight: bold;}
-    .error {color: #e74c3c;}
-    .warning {color: #f39c12;}
-    .rumor-card {background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 8px rgba(8, 0, 0, 0.1); margin-bottom: 10px;}
+        .main {background-color: #f0f5f5; font-family: 'Arial', sans-serif;}
+        .title {color: #2c3e50; font-size: 2.5em; font-weight: bold; text-align: center; margin-bottom: 20px;}
+        .subheader {color: #34495e; font-size: 1.5em; font-weight: bold;}
+        .error {color: #e74c3c;}
+        .warning {color: #f39c12;}
+        .rumor-card {background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 10px;}
     </style>
-""", unsafe_html=True)
+""")
 
-st.markdown('<h1 class="title">Mercato: تحليل شائعات انتقال اللاعبين</h1>', unsafe_html=True)
+st.markdown("# Mercato: تحليل شائعات انتقال اللاعبين", unsafe_allow_html=False)
 
 # إدخال اسم اللاعب
 player_input = st.text_input("اسم اللاعب (عربي أو إنجليزي)", key="player", placeholder="مثل: لويس دياز أو Luis Díaz")
@@ -210,19 +207,19 @@ if st.button("بحث", key="search"):
         with st.spinner("جاري البحث..."):
             player_info, transfer_info, rumors, error = get_transfer_data(selected_player, club_name)
         if error:
-            st.markdown(f'<p class="error">{error}</p>', unsafe_html=True)
+            st.markdown(f'<p class="error">{error}</p>', unsafe_allow_html=True)
         else:
             col1, col2 = st.columns([1, 2])
             with col1:
                 if player_info["image"]:
                     st.image(player_info["image"], width=200)
             with col2:
-                st.markdown(f'<h2 class="subheader">{player_info["name"]}</h2>', unsafe_html=True)
+                st.markdown(f'<h2 class="subheader">{player_info["name"]}</h2>', unsafe_allow_html=True)
                 st.write(f"**القيمة السوقية**: {player_info['market_value']}")
                 st.write(f"**احتمالية الانتقال**: {transfer_info['probability']}%")
                 st.write(f"[صفحة اللاعب على Transfermarkt]({player_info['url']})")
             if rumors:
-                st.markdown('<h2 class="subheader">الشائعات:</h2>', unsafe_html=True)
+                st.markdown('<h2 class="subheader">الشائعات:</h2>', unsafe_allow_html=True)
                 for rumor in rumors:
                     with st.container():
                         st.markdown(
@@ -233,7 +230,7 @@ if st.button("بحث", key="search"):
                                 التفاصيل: {rumor['content']}<br>
                                 نسبة الاحتمالية: {rumor['percentage']}%{'<br><a href="' + rumor['link'] + '">الرابط</a>' if rumor['link'] else ''}
                             </div>
-                            """, unsafe_html=True)
+                            """, unsafe_allow_html=True)
                 if any(r["percentage"] > 0 for r in rumors):
                     fig = px.bar(
                         x=[r["title"] for r in rumors],
@@ -243,6 +240,6 @@ if st.button("بحث", key="search"):
                     )
                     st.plotly_chart(fig)
             else:
-                st.markdown(f'<p class="warning">لا توجد شائعات متعلقة بنادي {club_name}.</p>', unsafe_html=True)
+                st.markdown(f'<p class="warning">لا توجد شائعات متعلقة بنادي {club_name}.</p>', unsafe_allow_html=True)
     else:
-        st.markdown('<p class="warning">يرجى إدخال اسم اللاعب والنادي.</p>', unsafe_html=True)
+        st.markdown('<p class="warning">يرجى إدخال اسم اللاعب والنادي.</p>', unsafe_allow_html=True)
