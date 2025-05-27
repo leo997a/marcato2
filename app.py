@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 def is_arabic(text):
     return any("\u0600" <= char <= "\u06FF" for char in text)
 
-# إزالة التشكيل من الأسماء (مثل "í" في Díaz)
+# إزالة التشكيل من الأسماء
 def normalize_name(name):
     return ''.join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn').lower().strip()
 
-# قاموس لترجمة أسماء الأندية العربية إلى الإنجليزية
+# قاموس ترجمة الأندية
 club_translations = {
     "النصر": "Al-Nassr",
     "الهلال": "Al-Hilal",
@@ -32,10 +32,9 @@ club_translations = {
     "برشلونة": "Barcelona",
     "ريال مدريد": "Real Madrid",
     "مانشستر يونايتد": "Manchester United",
-    # أضف المزيد حسب الحاجة
 }
 
-# ترجمة اسم النادي إذا كان بالعربية
+# ترجمة اسم النادي
 def translate_club_name(club_name):
     if is_arabic(club_name):
         club_name = club_name.strip()
@@ -49,7 +48,7 @@ def translate_club_name(club_name):
             return club_name
     return club_name.strip()
 
-# دالة الاقتراح التلقائي باستخدام Transfermarkt
+# دالة الاقتراح التلقائي
 def suggest_players(input_text, is_arabic=False):
     logger.info(f"Processing suggestion for input: {input_text}")
     suggestions = [input_text]
@@ -67,6 +66,9 @@ def suggest_players(input_text, is_arabic=False):
     try:
         base_url = "https://www.transfermarkt.com"
         search_queries = [input_text.replace(' ', '+'), normalize_name(input_text).replace(' ', '+')]
+        if ' ' in input_text:
+            first_name = input_text.split(' ')[0]
+            search_queries.append(first_name.replace(' ', '+'))
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
@@ -83,9 +85,8 @@ def suggest_players(input_text, is_arabic=False):
                 if link and link.text.strip():
                     player_name = link.text.strip()
                     normalized_player = normalize_name(player_name)
-                    # تقليل العتبة لالتقاط أسماء مشابهة
                     similarity = fuzz.partial_ratio(normalized_input, normalized_player)
-                    if similarity > 70 and player_name not in suggestions:  # خفض العتبة من 80 إلى 70
+                    if similarity > 65 and player_name not in suggestions:  # خفض العتبة إلى 65
                         suggestions.append(player_name)
             if len(suggestions) > 1:
                 break
@@ -94,9 +95,9 @@ def suggest_players(input_text, is_arabic=False):
         logger.error(f"Transfermarkt search error: {str(e)}")
 
     logger.info(f"Suggestions: {suggestions}")
-    return suggestions[:15]  # زيادة عدد الاقتراحات إلى 15
+    return suggestions[:15]
 
-# دالة جلب بيانات الشائعات من Transfermarkt
+# دالة جلب بيانات الشائعات
 def get_transfer_data(player_name, club_name):
     try:
         base_url = "https://www.transfermarkt.com"
@@ -147,14 +148,16 @@ def get_transfer_data(player_name, club_name):
         rumors_div = soup.find("div", {"id": "transfers"})
         if rumors_div:
             rows = rumors_div.select("table.transfergeruechte tbody tr")
+            logger.info(f"Found {len(rows)} rumor rows")
             for row in rows:
                 columns = row.find_all("td")
                 if len(columns) >= 6:
                     title = columns[0].text.strip()
-                    # البحث عن النادي المُدخل
-                    if normalized_club in normalize_name(title):
+                    logger.info(f"Rumor title: {title}, Club: {club_name_en}")
+                    # مطابقة مرنة لاسم النادي
+                    if fuzz.partial_ratio(normalized_club, normalize_name(title)) > 80:
                         percentage = 0
-                        percent_span = row.select_one("div.odds-bar span")
+                        percent_span = row.select_one(".percentage")
                         if percent_span and "%" in percent_span.text:
                             try:
                                 percentage = float(percent_span.text.replace("%", "").strip())
@@ -168,6 +171,7 @@ def get_transfer_data(player_name, club_name):
                             "percentage": percentage
                         })
                         club_probability = percentage
+                        logger.info(f"Matched rumor: {title}, Percentage: {percentage}%")
         transfer_info = {
             "probability": club_probability,
             "source": "Transfermarkt"
@@ -197,7 +201,7 @@ st.markdown("# Mercato: تحليل شائعات انتقال اللاعبين", 
 player_input = st.text_input("اسم اللاعب (عربي أو إنجليزي)", key="player", placeholder="مثل: خوان، جوان، Joan García أو Luis Díaz")
 is_arabic_input = is_arabic(player_input)
 
-if player_input and len(player_input) >= 2:  # تقليل الحد الأدنى للإدخال
+if player_input and len(player_input) >= 2:
     suggestions = suggest_players(player_input, is_arabic_input)
     if suggestions:
         selected_player = st.selectbox("اختر اللاعب:", suggestions)
