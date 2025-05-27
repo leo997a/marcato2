@@ -52,7 +52,7 @@ def translate_club_name(club_name):
             return club_name
     return club_name.strip()
 
-# دالة الاقتراح التلقائي (باستخدام requests)
+# دالة الاقتراح التلقائي
 def suggest_players(input_text, is_arabic=False):
     logger.info(f"Processing suggestion for input: {input_text}")
     suggestions = [input_text]
@@ -101,7 +101,7 @@ def suggest_players(input_text, is_arabic=False):
     logger.info(f"Suggestions: {suggestions}")
     return suggestions[:15]
 
-# دالة جلب بيانات الشائعات (باستخدام selenium)
+# دالة جلب بيانات الشائعات
 def get_transfer_data(player_name, club_name):
     try:
         base_url = "https://www.transfermarkt.com"
@@ -118,7 +118,7 @@ def get_transfer_data(player_name, club_name):
             "Accept-Language": "en-US,en;q=0.9"
         }
 
-        # البحث عن اللاعب باستخدام requests
+        # البحث عن اللاعب
         player_url = None
         for query in search_queries:
             search_url = f"{base_url}/schnellsuche/ergebnis/schnellsuche?query={query}"
@@ -143,17 +143,22 @@ def get_transfer_data(player_name, club_name):
 
         logger.info(f"Player URL: {player_url}")
 
-        # جلب الصفحة باستخدام selenium
+        # جلب الصفحة باستخدام Selenium
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-        driver.get(player_url)
-        time.sleep(3)  # الانتظار لتحميل JavaScript
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        driver.quit()
+        chrome_options.add_argument("--window-size=1920,1080")
+        try:
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+            driver.get(player_url)
+            time.sleep(5)  # انتظار تحميل JavaScript
+            soup = BeautifulSoup(driver.page_source, "html.parser")
+            driver.quit()
+        except Exception as e:
+            logger.error(f"Selenium error: {str(e)}")
+            return None, None, [], f"❌ خطأ في تحميل الصفحة: {str(e)}"
 
         name_tag = soup.find("h1", {"class": "data-header__headline-wrapper"})
         market_value_tag = soup.select_one(".data-header__market-value-wrapper")
