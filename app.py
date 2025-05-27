@@ -151,7 +151,8 @@ def get_transfer_data(player_name, club_name):
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
         try:
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+            CHROMEDRIVER_PATH = r"C:\Users\Reo k\Downloads\Compressed\chromedriver-win64\chromedriver.exe"
+            driver = webdriver.Chrome(service=Service(CHROMEDRIVER_PATH), options=chrome_options)
             driver.get(player_url)
             time.sleep(5)  # انتظار تحميل JavaScript
             soup = BeautifulSoup(driver.page_source, "html.parser")
