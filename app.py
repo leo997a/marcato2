@@ -7,6 +7,10 @@ from deep_translator import GoogleTranslator
 from rapidfuzz import fuzz
 import logging
 import unicodedata
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # إعداد التسجيل
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +52,7 @@ def translate_club_name(club_name):
             return club_name
     return club_name.strip()
 
-# دالة الاقتراح التلقائي
+# دالة الاقتراح التلقائي (باستخدام requests)
 def suggest_players(input_text, is_arabic=False):
     logger.info(f"Processing suggestion for input: {input_text}")
     suggestions = [input_text]
@@ -86,7 +90,7 @@ def suggest_players(input_text, is_arabic=False):
                     player_name = link.text.strip()
                     normalized_player = normalize_name(player_name)
                     similarity = fuzz.partial_ratio(normalized_input, normalized_player)
-                    if similarity > 80 and player_name not in suggestions:  # رفع العتبة إلى 80
+                    if similarity > 80 and player_name not in suggestions:
                         suggestions.append(player_name)
             if len(suggestions) > 1:
                 break
@@ -97,7 +101,7 @@ def suggest_players(input_text, is_arabic=False):
     logger.info(f"Suggestions: {suggestions}")
     return suggestions[:15]
 
-# دالة جلب بيانات الشائعات
+# دالة جلب بيانات الشائعات (باستخدام selenium)
 def get_transfer_data(player_name, club_name):
     try:
         base_url = "https://www.transfermarkt.com"
@@ -105,13 +109,16 @@ def get_transfer_data(player_name, club_name):
         normalized_club_variants = [
             normalize_name(club_name_en),
             normalize_name("FC " + club_name_en),
-            normalize_name(club_name_en.replace("Barcelona", "Barça"))
+            normalize_name(club_name_en.replace("Barcelona", "Barça")),
+            normalize_name("F.C. " + club_name_en)
         ]
         search_queries = [player_name.replace(' ', '+'), normalize_name(player_name).replace(' ', '+')]
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
         }
+
+        # البحث عن اللاعب باستخدام requests
         player_url = None
         for query in search_queries:
             search_url = f"{base_url}/schnellsuche/ergebnis/schnellsuche?query={query}"
@@ -135,9 +142,19 @@ def get_transfer_data(player_name, club_name):
             return None, None, [], f"❌ لم يتم العثور على اللاعب: {player_name}"
 
         logger.info(f"Player URL: {player_url}")
-        res = requests.get(player_url, headers=headers, timeout=10)
-        res.raise_for_status()
-        soup = BeautifulSoup(res.content, "html.parser")
+
+        # جلب الصفحة باستخدام selenium
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver.get(player_url)
+        time.sleep(3)  # الانتظار لتحميل JavaScript
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        driver.quit()
+
         name_tag = soup.find("h1", {"class": "data-header__headline-wrapper"})
         market_value_tag = soup.select_one(".data-header__market-value-wrapper")
         image_tag = soup.select_one(".data-header__profile-image")
@@ -157,10 +174,9 @@ def get_transfer_data(player_name, club_name):
                 logger.warning("No rumor rows found in transfers div")
             for row in rows:
                 columns = row.find_all("td")
-                if columns:  # إزالة شرط len(columns) >= 5
+                if columns:
                     title = columns[0].text.strip()
                     logger.info(f"Rumor title: {title}, Club: {club_name_en}")
-                    # مطابقة مرنة لاسم النادي
                     if any(fuzz.partial_ratio(variant, normalize_name(title)) > 60 for variant in normalized_club_variants):
                         percentage = 0
                         percent_span = row.select_one(".tm-odds-bar__percentage") or row.select_one(".percentage") or row.select_one("span[class*='percentage']")
@@ -185,9 +201,8 @@ def get_transfer_data(player_name, club_name):
             "source": "Transfermarkt"
         }
         return player_info, transfer_info, rumors, None
-    except requests.exceptions.RequestException as e:
-        return None, None, [], f"❌ خطأ في الاتصال: {str(e)}"
     except Exception as e:
+        logger.error(f"Error in get_transfer_data: {str(e)}")
         return None, None, [], f"❌ حدث خطأ غير متوقع: {str(e)}"
 
 # تنسيق الواجهة
