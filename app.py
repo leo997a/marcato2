@@ -167,7 +167,7 @@ def get_transfer_data(player_name, club_name):
             CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
             if not os.path.exists(CHROMEDRIVER_PATH):
                 return None, None, [], f"❌ ملف chromedriver غير موجود في المسار: {CHROMEDRIVER_PATH}"
-    service = Service(CHROMEDRIVER_PATH)
+            service = Service(CHROMEDRIVER_PATH)
         else:
             # لنظام Linux، استخدام webdriver_manager مع تحميل أحدث إصدار
             try:
