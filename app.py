@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def is_arabic(text):
     return any("\u0600" <= char <= "\u06FF" for char in text)
 
-# إزالة التشكيل من الأسماء
+# إزالة التشكيل
 def normalize_name(name):
     return ''.join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn').lower().strip()
 
@@ -86,7 +86,7 @@ def suggest_players(input_text, is_arabic=False):
                     player_name = link.text.strip()
                     normalized_player = normalize_name(player_name)
                     similarity = fuzz.partial_ratio(normalized_input, normalized_player)
-                    if similarity > 65 and player_name not in suggestions:  # خفض العتبة إلى 65
+                    if similarity > 60 and player_name not in suggestions:  # خفض العتبة إلى 60
                         suggestions.append(player_name)
             if len(suggestions) > 1:
                 break
@@ -151,13 +151,13 @@ def get_transfer_data(player_name, club_name):
             logger.info(f"Found {len(rows)} rumor rows")
             for row in rows:
                 columns = row.find_all("td")
-                if len(columns) >= 6:
+                if len(columns) >= 5:  # تقليل العدد لتجنب الأخطاء
                     title = columns[0].text.strip()
                     logger.info(f"Rumor title: {title}, Club: {club_name_en}")
                     # مطابقة مرنة لاسم النادي
-                    if fuzz.partial_ratio(normalized_club, normalize_name(title)) > 80:
+                    if fuzz.partial_ratio(normalized_club, normalize_name(title)) > 70:
                         percentage = 0
-                        percent_span = row.select_one(".percentage")
+                        percent_span = row.select_one(".tm-odds-bar__percentage")
                         if percent_span and "%" in percent_span.text:
                             try:
                                 percentage = float(percent_span.text.replace("%", "").strip())
@@ -165,8 +165,8 @@ def get_transfer_data(player_name, club_name):
                                 percentage = 0
                         rumors.append({
                             "title": title,
-                            "date": columns[2].text.strip(),
-                            "content": columns[4].text.strip(),
+                            "date": columns[2].text.strip() if len(columns) > 2 else "",
+                            "content": columns[4].text.strip() if len(columns) > 4 else "",
                             "link": base_url + columns[0].find("a")["href"] if columns[0].find("a") else None,
                             "percentage": percentage
                         })
