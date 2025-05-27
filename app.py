@@ -156,6 +156,7 @@ def get_transfer_data(player_name, club_name):
         chrome_options.add_argument("--window-size=1920,1080")
 
         # اختيار ChromeDriver بناءً على نظام التشغيل
+        driver = None
         if platform.system() == "Windows":
             CHROMEDRIVER_PATH = r"C:\Users\Reo k\Downloads\Compressed\chromedriver-win64\chromedriver.exe"
             if not os.path.exists(CHROMEDRIVER_PATH):
@@ -171,11 +172,12 @@ def get_transfer_data(player_name, club_name):
             # انتظار تحميل قسم الشائعات
             WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "transfers")))
             soup = BeautifulSoup(driver.page_source, "html.parser")
-            driver.quit()
         except Exception as e:
             logger.error(f"Selenium error: {str(e)}")
-            driver.quit()
             return None, None, [], f"❌ خطأ في تحميل الصفحة: {str(e)}"
+        finally:
+            if driver is not None:
+                driver.quit()
 
         name_tag = soup.find("h1", {"class": "data-header__headline-wrapper"})
         market_value_tag = soup.select_one(".data-header__market-value-wrapper")
