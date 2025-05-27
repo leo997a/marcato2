@@ -1,16 +1,20 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-import time
-import plotly.express as px
-from deep_translator import GoogleTranslator
-from rapidfuzz import fuzz
+import platform
+import os
 import logging
-import unicodedata
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from deep_translator import GoogleTranslator
+from rapidfuzz import fuzz
+import unicodedata
+import plotly.express as px
 
 # إعداد التسجيل
 logging.basicConfig(level=logging.INFO)
@@ -74,7 +78,7 @@ def suggest_players(input_text, is_arabic=False):
             first_name = input_text.split(' ')[0]
             search_queries.append(first_name.replace(' ', '+'))
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
         }
         for query in search_queries:
@@ -114,7 +118,7 @@ def get_transfer_data(player_name, club_name):
         ]
         search_queries = [player_name.replace(' ', '+'), normalize_name(player_name).replace(' ', '+')]
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
         }
 
@@ -143,22 +147,34 @@ def get_transfer_data(player_name, club_name):
 
         logger.info(f"Player URL: {player_url}")
 
-        # جلب الصفحة باستخدام Selenium
+        # إعداد Selenium
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--window-size=1920,1080")
-        try:
+
+        # اختيار ChromeDriver بناءً على نظام التشغيل
+        if platform.system() == "Windows":
             CHROMEDRIVER_PATH = r"C:\Users\Reo k\Downloads\Compressed\chromedriver-win64\chromedriver.exe"
-            driver = webdriver.Chrome(service=Service(CHROMEDRIVER_PATH), options=chrome_options)
+            if not os.path.exists(CHROMEDRIVER_PATH):
+                return None, None, [], f"❌ ملف chromedriver غير موجود في المسار: {CHROMEDRIVER_PATH}"
+            service = Service(CHROMEDRIVER_PATH)
+        else:
+            # لنظام Linux، استخدام webdriver_manager
+            service = Service(ChromeDriverManager().install())
+
+        try:
+            driver = webdriver.Chrome(service=service, options=chrome_options)
             driver.get(player_url)
-            time.sleep(5)  # انتظار تحميل JavaScript
+            # انتظار تحميل قسم الشائعات
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "transfers")))
             soup = BeautifulSoup(driver.page_source, "html.parser")
             driver.quit()
         except Exception as e:
             logger.error(f"Selenium error: {str(e)}")
+            driver.quit()
             return None, None, [], f"❌ خطأ في تحميل الصفحة: {str(e)}"
 
         name_tag = soup.find("h1", {"class": "data-header__headline-wrapper"})
