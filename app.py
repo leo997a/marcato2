@@ -78,7 +78,7 @@ def suggest_players(input_text, is_arabic=False):
             first_name = input_text.split(' ')[0]
             search_queries.append(first_name.replace(' ', '+'))
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
         }
         for query in search_queries:
@@ -118,7 +118,7 @@ def get_transfer_data(player_name, club_name):
         ]
         search_queries = [player_name.replace(' ', '+'), normalize_name(player_name).replace(' ', '+')]
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
         }
 
@@ -163,8 +163,8 @@ def get_transfer_data(player_name, club_name):
                 return None, None, [], f"❌ ملف chromedriver غير موجود في المسار: {CHROMEDRIVER_PATH}"
             service = Service(CHROMEDRIVER_PATH)
         else:
-            # لنظام Linux، استخدام webdriver_manager
-            service = Service(ChromeDriverManager().install())
+            # لنظام Linux، استخدام webdriver_manager مع إصدار متوافق مع Chrome 120
+            service = Service(ChromeDriverManager(version="120.0.6099.224").install())
 
         try:
             driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -299,4 +299,4 @@ if st.button("بحث", key="search"):
             else:
                 st.markdown(f'<p class="warning">لا توجد شائعات متعلقة بنادي {club_name} لهذا اللاعب.</p>', unsafe_allow_html=True)
     else:
-        st.markdown('<p class="warning">يرجى إدخال اسم اللاعب والنادي.</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="warning">يرجى إدخال اسم اللاعب والنادي.</p>', unsafe_allow_html=True)
