@@ -29,6 +29,10 @@ club_translations = {
     "الشباب": "Al-Shabab",
     "الاتفاق": "Al-Ettifaq",
     "القادسية": "Al-Qadsiah",
+    "برشلونة": "Barcelona",
+    "ريال مدريد": "Real Madrid",
+    "مانشستر يونايتد": "Manchester United",
+    # أضف المزيد حسب الحاجة
 }
 
 # ترجمة اسم النادي إذا كان بالعربية
@@ -79,8 +83,9 @@ def suggest_players(input_text, is_arabic=False):
                 if link and link.text.strip():
                     player_name = link.text.strip()
                     normalized_player = normalize_name(player_name)
+                    # تقليل العتبة لالتقاط أسماء مشابهة
                     similarity = fuzz.partial_ratio(normalized_input, normalized_player)
-                    if similarity > 80 and player_name not in suggestions:
+                    if similarity > 70 and player_name not in suggestions:  # خفض العتبة من 80 إلى 70
                         suggestions.append(player_name)
             if len(suggestions) > 1:
                 break
@@ -89,7 +94,7 @@ def suggest_players(input_text, is_arabic=False):
         logger.error(f"Transfermarkt search error: {str(e)}")
 
     logger.info(f"Suggestions: {suggestions}")
-    return suggestions[:10]
+    return suggestions[:15]  # زيادة عدد الاقتراحات إلى 15
 
 # دالة جلب بيانات الشائعات من Transfermarkt
 def get_transfer_data(player_name, club_name):
@@ -138,7 +143,7 @@ def get_transfer_data(player_name, club_name):
             "url": player_url
         }
         rumors = []
-        max_probability = 0
+        club_probability = 0
         rumors_div = soup.find("div", {"id": "transfers"})
         if rumors_div:
             rows = rumors_div.select("table.transfergeruechte tbody tr")
@@ -146,6 +151,7 @@ def get_transfer_data(player_name, club_name):
                 columns = row.find_all("td")
                 if len(columns) >= 6:
                     title = columns[0].text.strip()
+                    # البحث عن النادي المُدخل
                     if normalized_club in normalize_name(title):
                         percentage = 0
                         percent_span = row.select_one("div.odds-bar span")
@@ -161,9 +167,9 @@ def get_transfer_data(player_name, club_name):
                             "link": base_url + columns[0].find("a")["href"] if columns[0].find("a") else None,
                             "percentage": percentage
                         })
-                        max_probability = max(max_probability, percentage)
+                        club_probability = percentage
         transfer_info = {
-            "probability": max_probability if max_probability > 0 else min(len(rumors) * 25, 100),
+            "probability": club_probability,
             "source": "Transfermarkt"
         }
         return player_info, transfer_info, rumors, None
@@ -172,7 +178,7 @@ def get_transfer_data(player_name, club_name):
     except Exception as e:
         return None, None, [], f"❌ حدث خطأ غير متوقع: {str(e)}"
 
-# تنسيق الواجهة باستخدام st.html
+# تنسيق الواجهة
 st.set_page_config(page_title="Mercato App", layout="wide")
 st.html("""
     <style>
@@ -188,10 +194,10 @@ st.html("""
 st.markdown("# Mercato: تحليل شائعات انتقال اللاعبين", unsafe_allow_html=False)
 
 # إدخال اسم اللاعب
-player_input = st.text_input("اسم اللاعب (عربي أو إنجليزي)", key="player", placeholder="مثل: لويس دياز أو Luis Díaz")
+player_input = st.text_input("اسم اللاعب (عربي أو إنجليزي)", key="player", placeholder="مثل: خوان، جوان، Joan García أو Luis Díaz")
 is_arabic_input = is_arabic(player_input)
 
-if player_input and len(player_input) >= 3:
+if player_input and len(player_input) >= 2:  # تقليل الحد الأدنى للإدخال
     suggestions = suggest_players(player_input, is_arabic_input)
     if suggestions:
         selected_player = st.selectbox("اختر اللاعب:", suggestions)
@@ -200,7 +206,7 @@ if player_input and len(player_input) >= 3:
 else:
     selected_player = player_input
 
-club_name = st.text_input("اسم النادي (عربي أو إنجليزي)", key="club", placeholder="مثل: النصر أو Al-Nassr")
+club_name = st.text_input("اسم النادي (عربي أو إنجليزي)", key="club", placeholder="مثل: النصر، برشلونة أو Barcelona")
 
 if st.button("بحث", key="search"):
     if selected_player and club_name:
@@ -216,7 +222,7 @@ if st.button("بحث", key="search"):
             with col2:
                 st.markdown(f'<h2 class="subheader">{player_info["name"]}</h2>', unsafe_allow_html=True)
                 st.write(f"**القيمة السوقية**: {player_info['market_value']}")
-                st.write(f"**احتمالية الانتقال**: {transfer_info['probability']}%")
+                st.write(f"**احتمالية الانتقال إلى {club_name}**: {transfer_info['probability']}%")
                 st.write(f"[صفحة اللاعب على Transfermarkt]({player_info['url']})")
             if rumors:
                 st.markdown('<h2 class="subheader">الشائعات:</h2>', unsafe_allow_html=True)
@@ -236,10 +242,10 @@ if st.button("بحث", key="search"):
                         x=[r["title"] for r in rumors],
                         y=[r["percentage"] for r in rumors],
                         labels={"x": "الشائعة", "y": "النسبة المئوية (%)"},
-                        title="نسب الشائعات"
+                        title=f"نسب شائعات الانتقال إلى {club_name}"
                     )
                     st.plotly_chart(fig)
             else:
-                st.markdown(f'<p class="warning">لا توجد شائعات متعلقة بنادي {club_name}.</p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="warning">لا توجد شائعات متعلقة بنادي {club_name} لهذا اللاعب.</p>', unsafe_allow_html=True)
     else:
         st.markdown('<p class="warning">يرجى إدخال اسم اللاعب والنادي.</p>', unsafe_allow_html=True)
