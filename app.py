@@ -163,8 +163,12 @@ def get_transfer_data(player_name, club_name):
                 return None, None, [], f"❌ ملف chromedriver غير موجود في المسار: {CHROMEDRIVER_PATH}"
             service = Service(CHROMEDRIVER_PATH)
         else:
-            # لنظام Linux، استخدام webdriver_manager بدون تحديد إصدار معين
-            service = Service(ChromeDriverManager().install())
+            # لنظام Linux، استخدام webdriver_manager مع تحميل أحدث إصدار
+            try:
+                service = Service(ChromeDriverManager(cache_valid_range=1).install())
+            except Exception as e:
+                logger.error(f"WebDriver Manager error: {str(e)}")
+                return None, None, [], f"❌ خطأ في تثبيت ChromeDriver: {str(e)}"
 
         try:
             driver = webdriver.Chrome(service=service, options=chrome_options)
