@@ -4,5 +4,5 @@ beautifulsoup4
 deep-translator
 rapidfuzz
 selenium
-webdriver_manager
+webdriver_manager>=4.0.2
 plotly
